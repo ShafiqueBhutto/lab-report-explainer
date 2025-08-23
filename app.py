@@ -30,6 +30,27 @@ def check_status(value, normal_range):
         
     except: 
         return "Unknown"
+
+
+uploaded_file = st.file_uploader("Upload Lab Report", type=["csv", "xlsx"])
+
+if uploaded_file is not None:
+    if uploaded_file.name.endswith(".csv"):
+        df = pd.read_csv(uploaded_file)
+    else:
+        df = pd.read_excel(uploaded_file)
+
+    df["Status"] = df.apply(lambda row: check_status(row["Value"], row["Normal Range"]), axis=1)
+
+    st.subheader("Uploaded Report with Status")
+    st.dataframe(df.style.apply(
+        lambda row: ["background-color: lightgreen" if row.Status=="Normal"
+                     else "background-color: orange" if row.Status=="Low"
+                     else "background-color: red" if row.Status=="High" or row.Status=="Abnormal"
+                     else ""
+                     for _ in row], axis=1
+    ))
+
     
 
 
