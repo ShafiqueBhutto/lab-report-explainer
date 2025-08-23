@@ -100,10 +100,20 @@ if uploaded_file is not None:
 
         if test in explanations and status in explanations[test]:
             condition, advice = explanations[test][status]
+
+            extra_note = ""
+            if test == "Cholesterol" and status == "High" and age > 40:
+                extra_note = "Since you are over 40, risk of hear disease is higher."
+            if test == "Blood Pressure" and status == "Abnormal" and "Smoker" in lifestyle:
+                extra_note = "Smoking with high BP increase stroke risk."
+            if test == "Glucose" and status == "High" and "Sedentary (low activity)" in lifestyle:
+                extra_note = "Consider daily physical activity to improve glucose control."
+
             st.markdown(f"""
             **{test} ({status})**  
             -  {condition}  
             -  Recommendation: {advice}
+            {extra_note}
             """)
 
 
