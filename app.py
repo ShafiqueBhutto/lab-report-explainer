@@ -92,6 +92,77 @@ if uploaded_file is not None:
                      for _ in row], axis=1
     ))
 
+
+    st.subheader("Summary Report")
+
+    total_tests = len(df)
+    abnormal = df[df["Status"] != "Normal"]
+
+    if len(abnormal) == 0:
+        st.success(f"All {total_tests} results are within normal range.")
+    else:
+        st.warning(f"{len(abnormal)} out of {total_tests} results are abnormal.")
+
+
+        abnormal_tests = ", ".join(abnormal["Test Name"].tolist())
+        st.write(f"**key Issues:** {abnormal_tests}")
+
+        st.info("Recommendation: Please review abnormal results carefully."
+                "If multiple issues persist, consult your doctor.")
+
+    # here is the charts
+    import plotly.graph_objects as go
+
+    st.subheader("Visual Insights")
+
+    for _, row in df.iterrows():
+        test = row["Test Name"]
+        value = row["Value"]
+        normal_range = row["Normal Range"]
+
+        try:
+            if "-" in str(normal_range):
+                low, high = map(float, normal_range.split("-"))
+            elif "<" in str(normal_range):
+                low, high = 0, float(normal_range.replace("<", ""))
+            elif ">" in str(normal_range):
+                low, high = float(normal_range.replace(">", "")), value+50
+            else:
+                continue
+        except:
+            continue
+
+        fig = go.Figure()
+
+        #here is the normal range bar graph
+        fig.add_trace(go.Bar(
+            x=[test],
+            y=[high - low],
+            base=[low],
+            name="Normal Range",
+            marker_color="lightgreen",
+            opacity=0.6
+        ))
+
+        color = "red" if row["Status"] != "Normal" else "green"
+        fig.add_trace(go.Scatter(
+            x=[test],
+            y=[value],
+            mode="markers+text",
+            marker=dict(size=12, color=color),
+            name="Your Value",
+            text=[f"{value} {row['Unit']}"],
+            textposition="top center"
+        ))
+
+        fig.update_layout(
+            height=300,
+            margin=dict(l=10, r=10, t=30, b=10),
+            showlegend=True
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
     st.subheader("Explanations & Recommendations")
 
     for _, row in df.iterrows():
