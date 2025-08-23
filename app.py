@@ -62,6 +62,15 @@ explanations = {
     }
 }
 
+st.subheader("User Profile")
+
+age = st.number_input("Age", min_value=1, max_value=120, value=25)
+gender = st.selectbox("Gender", ["Male", "Female", "Other"])
+lifestyle = st.multiselect(
+    "Lifestyle Habits",
+    ["Smoker", "Alcohol", "Sedentary (low activity)", "Active (regular exercise)"]
+)
+
 
 
 uploaded_file = st.file_uploader("Upload Lab Report", type=["csv", "xlsx"])
