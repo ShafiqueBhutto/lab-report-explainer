@@ -136,6 +136,30 @@ if uploaded_file is not None:
 
     df["Status"] = df.apply(lambda row: check_status(row["Value"], row["Normal Range"]), axis=1)
 
+
+    st.subheader("AI-Powered Report Explanation")
+
+    report_summary = df.to_string(index=False)
+
+    user_profile = f"Age: {age}, Gender: {gender}, Lifestyle: {', '.join(lifestyle) if lifestyle else 'None'}"
+
+    prompt = f"""
+    You are a medical assistant AI.
+    Here is the patient's profile: {user_profile}.
+    Here are the lab test results with status:
+    {report_summary}.
+
+    Please explain these results in simple words, highlight any abnormal findings,
+    and give lifestyle-based recommendations (diet, exercise, habits).
+    Keep the tone friendly and clear. Avoid saying 'consult doctor' for everything
+    unless absolutely necessary.
+    """
+
+    with st.spinner("Analyzing report with AI..."):
+        response = llm(prompt)[0]['generated_text']
+    
+    st.write(response)
+
     st.subheader("Uploaded Report with Status")
     st.dataframe(df.style.apply(
         lambda row: ["background-color: lightgreen" if row.Status=="Normal"
