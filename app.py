@@ -1,32 +1,28 @@
 import streamlit as st
 import pandas as pd
-
-from pdf2image import convert_from_path, convert_from_bytes
+from pdf2image import convert_from_bytes
 from PIL import Image
 import pytesseract
 import re
 from transformers import pipeline
+import plotly.graph_objects as go
 
-#AI model Load here
+
 @st.cache_resource
-
 def load_model():
     return pipeline(
         "text-generation",
         model="mistralai/Mistral-7B-Instruct-v0.2",
-        device_map = "auto",
+        device_map="auto",
         max_new_tokens=500
     )
 
 llm = load_model()
 
 
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+st.title("🧪 Lab Report Explainer Dashboard")
+st.write("Upload your Lab Report (CSV / Excel / PDF / Image) to get results explained in simple language.")
 
-st.title("Lab Report Explainer Dashboard")
-
-
-st.write("Upload the Lab report (CSV)/Excel to get started. ")
 
 def check_status(value, normal_range):
     try:
@@ -39,7 +35,6 @@ def check_status(value, normal_range):
                 return "High"
             else:
                 return "Normal"
-            
         elif "<" in str(normal_range):
             limit = float(normal_range.replace("<", ''))
             value = float(value)
@@ -50,13 +45,10 @@ def check_status(value, normal_range):
             return "Low" if value <= limit else "Normal"
         else:
             return "Normal" if str(value) == str(normal_range) else "Abnormal"
-        
-    except: 
+    except:
         return "Unknown"
-    
 
 
-# Here is the explanation to show final in text for results
 explanations = {
     "Glucose": {
         "High": ("High blood sugar may indicate pre-diabetes or diabetes.",
@@ -84,8 +76,8 @@ explanations = {
     }
 }
 
-st.subheader("User Profile")
 
+st.subheader("👤 User Profile")
 age = st.number_input("Age", min_value=1, max_value=120, value=25)
 gender = st.selectbox("Gender", ["Male", "Female", "Other"])
 lifestyle = st.multiselect(
@@ -94,108 +86,96 @@ lifestyle = st.multiselect(
 )
 
 
-
-uploaded_file = st.file_uploader("Upload Lab Report", type=["csv", "xlsx", "pdf", "png", "jpg", "jpeg"])
+uploaded_file = st.file_uploader("📂 Upload Lab Report", type=["csv", "xlsx", "pdf", "png", "jpg", "jpeg"])
 
 if uploaded_file is not None:
+    # CSV
     if uploaded_file.name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
+
+    # Excel
     elif uploaded_file.name.endswith(".xlsx"):
         df = pd.read_excel(uploaded_file)
+
+    # PDF → OCR
     elif uploaded_file.name.endswith(".pdf"):
         images = convert_from_bytes(uploaded_file.read())
         text = ""
         for img in images:
             text += pytesseract.image_to_string(img)
+
+    # Images → OCR
     elif uploaded_file.name.lower().endswith(("png", "jpg", "jpeg")):
         image = Image.open(uploaded_file)
         text = pytesseract.image_to_string(image)
-    
 
+    # Extract structured data if OCR text exists
     if 'text' in locals():
-        st.subheader("Extracted Raw Text from Report")
+        st.subheader("📄 Extracted Raw Text (First 1000 chars)")
         st.text(text[:1000])
-
 
         pattern = r"([A-Za-z ]+)\s+([\d.]+)\s*([a-zA-Z/%]+)?\s*([\d\-<>.]+)?"
         matches = re.findall(pattern, text)
 
         parsed_data = []
         for m in matches:
-            test_name = m[0].strip()
-            value = m[1]
-            unit = m[2]
-            normal_range = m[3]
+            test_name, value, unit, normal_range = m
             if test_name and value:
-                parsed_data.append([test_name, value, unit, normal_range])
+                parsed_data.append([test_name.strip(), value, unit, normal_range])
 
         if parsed_data:
             df = pd.DataFrame(parsed_data, columns=["Test Name", "Value", "Unit", "Normal Range"])
         else:
-            st.error("Could not parse structured test values from the scanned file.")
+            st.error("⚠️ Could not parse structured test values from scanned file.")
 
+   
     df["Status"] = df.apply(lambda row: check_status(row["Value"], row["Normal Range"]), axis=1)
 
+   
+    def generate_ai_report(df, age, gender, lifestyle):
+        report_summary = df.to_string(index=False)
+        user_profile = f"Age: {age}, Gender: {gender}, Lifestyle: {', '.join(lifestyle) if lifestyle else 'None'}"
 
-    st.subheader("AI-Powered Report Explanation")
+        prompt = f"""
+        You are a medical assistant AI.
+        Patient Profile: {user_profile}.
+        Lab Test Results with Status:
+        {report_summary}.
 
-    report_summary = df.to_string(index=False)
+        Explain the results in very simple words.
+        Highlight any abnormal findings.
+        Give lifestyle-based recommendations (diet, exercise, habits).
+        Keep the tone friendly and clear. Only say 'consult doctor' if necessary.
+        """
 
-    user_profile = f"Age: {age}, Gender: {gender}, Lifestyle: {', '.join(lifestyle) if lifestyle else 'None'}"
-
-    prompt = f"""
-    You are a medical assistant AI.
-    Here is the patient's profile: {user_profile}.
-    Here are the lab test results with status:
-    {report_summary}.
-
-    Please explain these results in simple words, highlight any abnormal findings,
-    and give lifestyle-based recommendations (diet, exercise, habits).
-    Keep the tone friendly and clear. Avoid saying 'consult doctor' for everything
-    unless absolutely necessary.
-    """
-
-    with st.spinner("Analyzing report with AI..."):
         response = llm(prompt)[0]['generated_text']
-    
-    st.write(response)
+        return response
 
-    st.subheader("Uploaded Report with Status")
+    st.subheader("📊 Uploaded Report with Status")
     st.dataframe(df.style.apply(
         lambda row: ["background-color: lightgreen" if row.Status=="Normal"
                      else "background-color: orange" if row.Status=="Low"
-                     else "background-color: red" if row.Status=="High" or row.Status=="Abnormal"
+                     else "background-color: red" if row.Status in ["High", "Abnormal"]
                      else ""
                      for _ in row], axis=1
     ))
 
 
-    st.subheader("Summary Report")
-
+    st.subheader("📌 Summary Report")
     total_tests = len(df)
     abnormal = df[df["Status"] != "Normal"]
 
     if len(abnormal) == 0:
-        st.success(f"All {total_tests} results are within normal range.")
+        st.success(f"✅ All {total_tests} results are within normal range.")
     else:
-        st.warning(f"{len(abnormal)} out of {total_tests} results are abnormal.")
-
-
+        st.warning(f"⚠️ {len(abnormal)} out of {total_tests} results are abnormal.")
         abnormal_tests = ", ".join(abnormal["Test Name"].tolist())
-        st.write(f"**key Issues:** {abnormal_tests}")
+        st.write(f"**Key Issues:** {abnormal_tests}")
 
-        st.info("Recommendation: Please review abnormal results carefully."
-                "If multiple issues persist, consult your doctor.")
 
-    # here is the charts
-    import plotly.graph_objects as go
-
-    st.subheader("Visual Insights")
-
+    st.subheader("📉 Visual Insights")
     for _, row in df.iterrows():
-        test = row["Test Name"]
-        value = row["Value"]
-        normal_range = row["Normal Range"]
+        test, value, normal_range = row["Test Name"], float(row["Value"]), row["Normal Range"]
 
         try:
             if "-" in str(normal_range):
@@ -203,68 +183,47 @@ if uploaded_file is not None:
             elif "<" in str(normal_range):
                 low, high = 0, float(normal_range.replace("<", ""))
             elif ">" in str(normal_range):
-                low, high = float(normal_range.replace(">", "")), value+50
+                low, high = float(normal_range.replace(">", "")), value + 50
             else:
                 continue
         except:
             continue
 
         fig = go.Figure()
-
-        #here is the normal range bar graph
-        fig.add_trace(go.Bar(
-            x=[test],
-            y=[high - low],
-            base=[low],
-            name="Normal Range",
-            marker_color="lightgreen",
-            opacity=0.6
-        ))
+        fig.add_trace(go.Bar(x=[test], y=[high - low], base=[low],
+                             name="Normal Range", marker_color="lightgreen", opacity=0.6))
 
         color = "red" if row["Status"] != "Normal" else "green"
-        fig.add_trace(go.Scatter(
-            x=[test],
-            y=[value],
-            mode="markers+text",
-            marker=dict(size=12, color=color),
-            name="Your Value",
-            text=[f"{value} {row['Unit']}"],
-            textposition="top center"
-        ))
-
-        fig.update_layout(
-            height=300,
-            margin=dict(l=10, r=10, t=30, b=10),
-            showlegend=True
-        )
-
+        fig.add_trace(go.Scatter(x=[test], y=[value], mode="markers+text",
+                                 marker=dict(size=12, color=color),
+                                 name="Your Value", text=[f"{value} {row['Unit']}"], textposition="top center"))
         st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("Explanations & Recommendations")
 
+    st.subheader("📖 Explanations & Recommendations")
     for _, row in df.iterrows():
-        test = row["Test Name"]
-        status = row["Status"]
+        test, status = row["Test Name"], row["Status"]
 
         if test in explanations and status in explanations[test]:
             condition, advice = explanations[test][status]
 
             extra_note = ""
             if test == "Cholesterol" and status == "High" and age > 40:
-                extra_note = "Since you are over 40, risk of hear disease is higher."
+                extra_note = "Since you are over 40, heart disease risk is higher."
             if test == "Blood Pressure" and status == "Abnormal" and "Smoker" in lifestyle:
-                extra_note = "Smoking with high BP increase stroke risk."
+                extra_note = "Smoking with high BP increases stroke risk."
             if test == "Glucose" and status == "High" and "Sedentary (low activity)" in lifestyle:
-                extra_note = "Consider daily physical activity to improve glucose control."
+                extra_note = "Daily physical activity can improve glucose control."
 
             st.markdown(f"""
             **{test} ({status})**  
-            -  {condition}  
-            -  Recommendation: {advice}
+            - {condition}  
+            - Recommendation: {advice}  
             {extra_note}
             """)
 
-
-    
-
-
+    st.subheader("🤖 AI-Powered Explanation")
+    if st.button("Generate AI Report"):
+        with st.spinner("Analyzing with AI..."):
+            ai_report = generate_ai_report(df, age, gender, lifestyle)
+        st.write(ai_report)

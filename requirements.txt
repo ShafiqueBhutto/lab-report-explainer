@@ -1,0 +1,10 @@
+streamlit
+pandas
+pdf2image
+pillow
+pytesseract
+transformers
+torch
+accelerate
+plotly
+poppler-utils
