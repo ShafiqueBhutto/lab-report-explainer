@@ -8,3 +8,5 @@ torch
 accelerate
 plotly
 poppler-utils
+torchvision
+huggingface_hub
