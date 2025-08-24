@@ -1,6 +1,13 @@
 import streamlit as st
 import pandas as pd
 
+from pdf2image import convert_from_path, convert_from_bytes
+from PIL import Image
+import pytesseract
+import re
+
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
 st.title("Lab Report Explainer Dashboard")
 
 
@@ -73,13 +80,44 @@ lifestyle = st.multiselect(
 
 
 
-uploaded_file = st.file_uploader("Upload Lab Report", type=["csv", "xlsx"])
+uploaded_file = st.file_uploader("Upload Lab Report", type=["csv", "xlsx", "pdf", "png", "jpg", "jpeg"])
 
 if uploaded_file is not None:
     if uploaded_file.name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
-    else:
+    elif uploaded_file.name.endswith(".xlsx"):
         df = pd.read_excel(uploaded_file)
+    elif uploaded_file.name.endswith(".pdf"):
+        images = convert_from_bytes(uploaded_file.read())
+        text = ""
+        for img in images:
+            text += pytesseract.image_to_string(img)
+    elif uploaded_file.name.lower().endswith(("png", "jpg", "jpeg")):
+        image = Image.open(uploaded_file)
+        text = pytesseract.image_to_string(image)
+    
+
+    if 'text' in locals():
+        st.subheader("Extracted Raw Text from Report")
+        st.text(text[:1000])
+
+
+        pattern = r"([A-Za-z ]+)\s+([\d.]+)\s*([a-zA-Z/%]+)?\s*([\d\-<>.]+)?"
+        matches = re.findall(pattern, text)
+
+        parsed_data = []
+        for m in matches:
+            test_name = m[0].strip()
+            value = m[1]
+            unit = m[2]
+            normal_range = m[3]
+            if test_name and value:
+                parsed_data.append([test_name, value, unit, normal_range])
+
+        if parsed_data:
+            df = pd.DataFrame(parsed_data, columns=["Test Name", "Value", "Unit", "Normal Range"])
+        else:
+            st.error("Could not parse structured test values from the scanned file.")
 
     df["Status"] = df.apply(lambda row: check_status(row["Value"], row["Normal Range"]), axis=1)
 
