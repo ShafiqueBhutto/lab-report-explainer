@@ -5,6 +5,21 @@ from pdf2image import convert_from_path, convert_from_bytes
 from PIL import Image
 import pytesseract
 import re
+from transformers import pipeline
+
+#AI model Load here
+@st.cache_resource
+
+def load_model():
+    return pipeline(
+        "text-generation",
+        model="mistralai/Mistral-7B-Instruct-v0.2",
+        device_map = "auto",
+        max_new_tokens=500
+    )
+
+llm = load_model()
+
 
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
